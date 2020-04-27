@@ -1,5 +1,5 @@
 # ChatServer
-An online chat server where users can create public and private rooms, send messages to the room and privately to users, and like messages. The admin of a room can ban/kick users and quarantine/delete rooms. 
+An online chat server where users can create public and private rooms, send messages to the room and privately to users, and like messages. The admin of a room can ban/kick users and quarantine/delete rooms. I created this with partner Sahara Ensley (sahara-ensley).
 
 ## Installation
 Clone the Repository
