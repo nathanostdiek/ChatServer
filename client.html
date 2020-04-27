@@ -1,0 +1,801 @@
+
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+        <title>A Chat Server</title>
+        <script src="/socket.io/socket.io.js"></script>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous" />
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+        <link href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous">
+
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+        <style>
+            #room-name{
+                font-size: 20px;
+                font-weight: bold;
+            }
+
+            .message_user{
+                color: #B3B3B3;
+                font-size: 12px;
+            }
+
+            .ME {
+                background-color: rgba(169,208, 231, .3);
+            }
+
+            .message-content{
+                font-size: 15px;
+            }
+
+            .time-stamp{
+                font-size:11px;
+                color: #B3B3B3;
+            }
+
+            #message_input {
+                border-radius: 10px;
+                border-style: solid;
+                border-width: thin;
+                margin-left: 10px;
+            }
+
+            #message_input:active, #message_input:focus {
+                outline-style: none;
+            }
+            #chatlog{
+                max-height: 500px;
+                overflow: scroll;
+            }
+            .card-nate {
+                width: 60%;
+                margin: auto;
+                margin-top: 10px;
+            }
+            .passcheck {
+                margin-right: 15px;
+                margin-left: 20px;
+            }
+            .joinroom {
+                margin-top: 10px;
+                margin-left: 20px;
+
+            }
+
+            #admin-btn-lobby{
+                margin-top: 10px;
+                margin-left: 20px;
+            }
+            .banner {
+                margin: 30px;
+
+            }
+            #createroombutton {
+                margin-top: 10px;
+                margin-bottom: 10px;
+            }
+            .createroomform > input, .createroomform > div{
+                margin-bottom: 8px;
+            }
+            .alert{
+                margin: auto;
+            }
+            #wrongpass {
+                margin-top: 10px;
+                margin-left: 20px;
+            }
+
+            .msg_btn {
+                right:100%;
+            }
+
+            .liked-heart{
+                font-size: 13px;
+                color: #C70039;
+            }
+
+            .unliked-heart {
+                font-size: 13px;
+                color: #B3B3B3;
+            }
+
+            .unliked-heart:hover {
+                color: #C70039;
+            }
+            .private-message{
+                
+                color: red !important;
+            }
+        </style>
+
+      <script >
+            //connect the socket and set the room and user to null initially 
+            let socketio = io.connect();
+            let currentRoom = null;
+            let currentUser=null;
+
+            //a message was sent, this displays it on the room view and clears the message input
+            socketio.on("display_message",function(data) {
+                //only clear input if you're the one who sent the message
+                if(data.message.user.name == currentUser.name){
+                    document.getElementById('message_input').value="";
+                }
+                add_message(data['message'], data.idx);
+            });
+
+            //if someone got around the front-end to join a room they're banned from this stops them
+            socketio.on("nice-try", function(data){
+                backLobby();
+                alert(data.message);
+            })
+
+            //when a message is displayed, make sure the feed scrolls to see the message
+            function scroll(){
+                let chat = document.getElementById("chatlog");
+                chat.scrollTop = chat.scrollHeight;
+            }
+
+            //add the html for a new message
+            function add_message(message, idx){
+                let chat_log = document.getElementById("chatlog");
+                let new_row = document.createElement("div");
+                let new_p = document.createElement('p');
+                new_p.classList+="message-content";
+
+                //adding the timestamp
+                let time_stamp = document.createElement('span');
+                time_stamp.classList+="time-stamp float-right";
+                time_stamp.appendChild(document.createTextNode(message.timestamp));
+
+                //adding the likes
+                let likes = document.createElement('span');
+                likes.classList="float-right"
+                let heart = document.createElement('i');
+                heart.setAttribute('idx', idx);
+                let numLikes = document.createTextNode(message.likes);
+                if(message.liked_by.indexOf(currentUser.name)>-1){
+                    heart.classList="fa fa-heart liked-heart pr-2";
+                }
+                else{
+                    heart.classList="fa fa-heart-o unliked-heart pr-2";
+                }
+                likes.appendChild(heart);
+                likes.appendChild(numLikes);
+
+                //adding the username
+                let user_name = document.createElement('p');
+                user_name.classList+="message_user p-0 m-0";
+                let secret = (message.sentTo != "all");
+                if(secret){
+                    user_name.classList+= " private-message";
+                    user_name.appendChild(document.createTextNode("Private Message from " + message.user.name + " to " + message.sentTo));
+                }
+                else {
+                    user_name.appendChild(document.createTextNode(message.user.name));
+                    new_p.appendChild(likes);
+
+                }
+                if(message.user.name == currentUser.name){
+                    new_row.classList += "ME";
+                }
+                //appending everything
+                if(secret && (currentUser.name == message.user.name || currentUser.name == message.sentTo)){
+                    new_message = document.createTextNode(message.content);
+                    new_p.appendChild(new_message);
+                    new_row.appendChild(user_name);
+                    new_row.appendChild(new_p);
+                    chat_log.appendChild(time_stamp);
+                    chat_log.appendChild(new_row);
+                }
+                else if (!secret){
+                    new_message = document.createTextNode(message.content);
+                    new_p.appendChild(new_message);
+                    new_row.appendChild(user_name);
+                    new_row.appendChild(new_p);
+                    chat_log.appendChild(time_stamp);
+                    chat_log.appendChild(new_row);
+                }
+
+
+                //scroll so message is in view
+                scroll();
+            }
+
+            //clears the html when a room is entered/left
+            socketio.on("clear-room", function(data) {
+                document.getElementById('chatlog').innerHTML="";
+
+            })
+
+            //fills the html for the room 
+            socketio.on("populate-room", function(data) {
+                let messages=data['messages'];
+                document.getElementById("chatlog").innerHTML="";
+                for(let i=0; i<messages.length; i++){
+                    add_message(messages[i], i);
+                }
+            });
+
+            //turn off the display and alert the people in the room
+            socketio.on('room-deleted', function(data){
+                alert("This room has been deleted, sorry");
+                document.getElementById("lobby-room").style.display = "block";
+                document.getElementById("createroombutton").style.display = "inline-block";
+                document.getElementById("currentroom").style.display = "none";
+            })
+
+            //display the fact that the room is quarantined
+            socketio.on('you-are-quarantined', function(data){
+                document.getElementById('room-warning-message').innerHTML="";
+                document.getElementById('room-warning-message').appendChild(document.createTextNode(data.message));
+            });
+
+            //redisplay the lobby when the room gets quarantined
+            socketio.on('room-quarantined', function(data){
+                displayLobby(data);
+            });
+
+            //after login this sets the current user variable and updates the main page
+            socketio.on('return_user', function(data) {
+
+                if(data.a){
+                    $("#loginmodal").modal("hide");
+                    currentUser=data['user'];
+                    document.getElementById("topbanner").innerHTML="";
+                    document.getElementById("topbanner").appendChild(document.createTextNode("Welcome " + currentUser.name));
+                }
+                else {
+                    currentUser = null;
+                }
+
+            });
+
+            //remove user from the room and alert them
+            socketio.on('user-banned', function(data){
+                if(currentUser.name == data.banned_user){
+                    backLobby();
+                    alert("You got banned!! You cannot join that chat room again.");
+                }
+            });
+
+            //kick the user and alert them
+            socketio.on('user-kicked', function(data){
+                if(currentUser.name == data.kicked_user){
+                    backLobby();
+                    alert("You got kicked!! You can join the room again...but maybe think about what you did.");
+                }
+            });
+
+            //called when the send button is clicked. sends info to the server
+            function sendMessage(){
+                let msg = document.getElementById("message_input").value;
+                socketio.emit("message_sent", {message:msg, room:currentRoom, user:currentUser});
+            }
+
+            //called when the join button is clicked, sends user and room to the server
+            function join_room(name){
+                currentRoom=name;
+                socketio.emit("joined-room", {room:name, user:currentUser});
+            }
+
+            //called when back to lobby button is clicked, sends user and room to server
+            function leave_room(){
+                document.getElementById('room-warning-message').innerHTML="";
+                socketio.emit("left-room", {room:currentRoom, user:currentUser});
+            }
+
+            //login function
+            function login(){
+                //$("#loginmodal").modal("hide");
+                let user = String(document.getElementById("user_input").value);
+                socketio.emit('login', {username: user});
+
+            }
+
+        //create room from server
+      socketio.on("create-room-to-client",function(data) {
+        document.getElementById("errormessage").innerHTML = "";
+        if(!data.created && data.message.length > 0 && (currentUser.name == data.r.admin)){
+            let warning = document.createElement("div");
+            warning.setAttribute("class", "alert alert-danger col-4");
+            warning.appendChild(document.createTextNode("Room not created. Room name already exists."));
+            document.getElementById("errormessage").appendChild(warning);
+        }
+        else if((currentUser.name == data.r.admin)){
+            let success = document.createElement("div");
+            success.setAttribute("class", "alert alert-success col-4");
+            success.appendChild(document.createTextNode("Room created."));
+            document.getElementById("errormessage").appendChild(success);
+        }
+        displayLobby(data);
+      });
+
+      socketio.on("delete-room-to-client", function(data) {
+          displayLobby(data);
+      })
+
+      
+      socketio.on("display_users_in_room", function(data){
+        let user_list = document.getElementById("user-list-room");
+        user_list.innerHTML = "";
+
+        displayUsersRoom(data.users);
+      });
+
+      
+      //create room from form
+      function createRoom(event){
+        event.preventDefault();
+        let roomname = document.getElementById("create-room-name").value;
+        let roomadmin = currentUser.name;
+        let roomprivate = document.getElementById("private-checkbox").checked;
+        let roompass = document.getElementById("private-pass").value;
+
+         socketio.emit("create-room-to-server", {name:roomname, admin: roomadmin, private: roomprivate, password: roompass});
+      }
+
+      //display all rooms in lobby
+    function displayLobby(data) {
+
+        document.getElementById("lobby-room").innerHTML = "";
+
+        for(let a = 0; a < data.message.length; a++){
+            let room = data.message[a]
+            let r = document.createElement("div");
+            r.setAttribute("class", "card-nate card");
+            let title = document.createElement("h2");
+            title.setAttribute("class", "card-header");
+
+            title.appendChild(document.createTextNode(data.message[a].name));
+            r.appendChild(title);
+            
+
+            let body = document.createElement("div");
+            body.setAttribute("class", "card-body");
+            let details = document.createElement("p");
+            details.setAttribute("class", "card-text");
+            let passcheck = document.createElement("input");
+            passcheck.setAttribute("type", "password");
+            passcheck.setAttribute("placeholder", "Password");
+            passcheck.setAttribute("name", String(data.message[a].name));
+            passcheck.setAttribute("class", "passcheck form-control col-4");
+
+
+            let privacy = "Public";
+            if(data.message[a].private){
+                privacy = "Private";
+            }
+            let l = document.createElement("ul");
+            let f = document.createElement("li");
+            let n = document.createElement("li");
+            f.appendChild(document.createTextNode(privacy + " Room" ));
+            //details.appendChild(document.createTextNode(data.message[a].members.length + " Members in Room   "));
+            n.appendChild(document.createTextNode("Created By: "+ String(data.message[a].admin)));
+            l.appendChild(f);
+            l.appendChild(n);
+            details.appendChild(l);
+            body.appendChild(details);
+            if(data.message[a].private){
+                body.appendChild(passcheck);
+            }
+            let joinbutton = document.createElement("button");
+            joinbutton.value = "Join Room";
+            joinbutton.setAttribute("class", "joinroom btn btn-primary col-4");
+            joinbutton.setAttribute("id", data.message[a].name);
+            joinbutton.setAttribute("privacy", data.message[a].private);
+            joinbutton.setAttribute("name", String(joinbutton.id));
+            joinbutton.appendChild(document.createTextNode("Join Room"));
+
+            
+            body.appendChild(joinbutton);
+            if(room.banned.indexOf(currentUser.name)>-1){
+                joinbutton.setAttribute("aria-disabled", "true");
+                joinbutton.disabled=true;
+                body.appendChild(document.createTextNode("You are banned from this chat room"));
+            }
+
+            let admin = data.message[a].admin == currentUser.name;
+            if(admin) {
+                // let admin_div = document.createElement('div');
+                // admin_div.id = "admin-btn-lobby";
+                let admin_btn = document.createElement('button');
+                admin_btn.classList = "btn btn-outline-danger col-2";
+                admin_btn.appendChild(document.createTextNode("ADMIN"));
+
+                admin_btn.id="admin-btn-lobby";
+                admin_btn.setAttribute("room", data.message[a].name);
+                //admin_btn.setAttribute("onclick", "list_users(" + data.message[a].name +")");
+                admin_btn.setAttribute("data-toggle", "modal");
+                admin_btn.setAttribute("data-target", "#admin-modal");
+                //admin_div.appendChild(admin_btn);
+                body.appendChild(admin_btn);
+            }
+
+            if(room.quarantined){
+                joinbutton.setAttribute("aria-disabled", "true");
+                joinbutton.disabled=true;
+                r.classList+=" border-warning";
+                body.classList+=" text-warning";
+            }
+            r.appendChild(body);
+            document.getElementById("lobby-room").appendChild(r);
+         }
+    }
+    //displays lobby for users
+    socketio.on("display-lobby", function(data){
+        if(data.a){
+            displayLobby(data);
+        }
+        else {
+            $("#wronguser").remove();
+            let warning = document.createElement("div");
+            warning.setAttribute("class", "alert alert-danger col");
+            warning.setAttribute("id", "wronguser");
+            warning.appendChild(document.createTextNode("Username already logged in. Pick another name."));
+            $(warning).insertAfter(document.getElementById("user_input"));
+            $("#loginmodal").modal({backdrop: 'static', keyboard: false});
+
+        }
+    });
+
+    //sends message for dm message
+    socketio.on('dm-message', function(data){
+        if(currentUser.name === data.to){
+            add_message(data.message, data.index);
+
+        }
+        if (currentUser.name == data.from){
+            add_message(data.message, data.index);
+        }
+
+    });
+
+    //check password for joining room
+    socketio.on("try-joining-to-client", function(data){
+        $("#wrongpass").remove();
+        if(data.allow){
+            document.getElementById("errormessage").innerHTML = "";
+            displayRoom(data.r.name);
+        }
+        else{
+            let warning = document.createElement("div");
+            warning.setAttribute("class", "alert alert-danger col-3");
+            warning.setAttribute("id", "wrongpass");
+            warning.appendChild(document.createTextNode("Wrong Password."));
+            $(warning).insertBefore(document.getElementById(data.r.name));
+        }
+    });
+
+    //gets the users when the admin button is clicked
+    socketio.on("return-user-list", function(data){
+
+        displayUsers(data.room, data.users);
+    });
+
+    //displays all the users and appropriate buttons inside the actual room
+    function displayUsersRoom(users){
+        let user_div = document.getElementById("user-list-room");
+          for (let i=0; i<users.length; i++){
+            let new_div = document.createElement('div');
+            new_div.classList="row w-100 justify-content-between"
+            let user_name = document.createElement('p');
+            user_name.classList+="pl-3 my-auto";
+            user_name.appendChild(document.createTextNode(users[i].name));
+            new_div.appendChild(user_name);
+
+            if(users[i].name != currentUser.name){
+            let msg_btn = document.createElement('button');
+            msg_btn.classList += "btn btn-primary btn-sm msg_btn";
+            msg_btn.appendChild(document.createTextNode('DM'));
+            msg_btn.setAttribute("user", users[i].name);
+            let dm_message = document.createElement("input");
+            dm_message.setAttribute("type", "text");
+            dm_message.setAttribute("id", users[i].name);
+            dm_message.setAttribute("placeholder", "DM here...");
+
+            dm_message.setAttribute("class", "col-6");
+
+            new_div.appendChild(dm_message);
+            new_div.appendChild(msg_btn);
+            }
+
+            user_div.appendChild(new_div);
+            user_div.appendChild(document.createElement("hr"));
+          }
+      }
+
+    //display all the users and appropriate buttons when the admin button is clicked
+    function displayUsers(room, users){
+        let admin_modal = document.getElementById('admin-modal-body');
+        admin_modal.innerHTML="";
+        let header = document.getElementById("admin-modal-header");
+        header.innerHTML = "";
+        header.appendChild(document.createTextNode(room.name + " settings"));
+        let del_btn = document.getElementById("delete-room");
+        del_btn.setAttribute('room', room.name);
+        let quar_btn = document.getElementById("quarantine-room");
+        quar_btn.setAttribute('room', room.name);
+        for(let i=0; i<users.length; i++){
+            if(users[i].name != currentUser.name){
+                let new_div = document.createElement('div');
+                new_div.classList="row w-100 justify-content-between"
+                let user_name = document.createElement('p');
+                user_name.classList+="pl-3 my-auto";
+                user_name.appendChild(document.createTextNode(users[i].name));
+                let btn_div = document.createElement('div');
+                let kick_btn = document.createElement('button');
+                kick_btn.classList += "btn btn-outline-success btn-sm float-right kick_btn";
+                kick_btn.appendChild(document.createTextNode('Kick'));
+                kick_btn.setAttribute("room", room.name);
+                kick_btn.setAttribute("user", users[i].name);
+                kick_btn.setAttribute("data-dismiss", "modal");
+                let ban_btn = document.createElement('button');
+                ban_btn.classList += "btn btn-outline-danger btn-sm float-right ban_btn";
+                ban_btn.setAttribute("room", room.name);
+                ban_btn.setAttribute("user", users[i].name);
+                ban_btn.setAttribute("data-dismiss", "modal");
+                ban_btn.appendChild(document.createTextNode('Ban'));
+
+                btn_div.appendChild(kick_btn);
+                btn_div.appendChild(ban_btn);
+                new_div.appendChild(user_name);
+                new_div.appendChild(btn_div);
+
+                admin_modal.append(new_div);
+                admin_modal.append(document.createElement("hr"));
+            }
+        }
+    }
+
+    //display a joined a room for a user
+    function displayRoom(name) {
+        document.getElementById("lobby-room").style.display = "none";
+        document.getElementById("errormessage").innerHTML = "";
+
+        let room_name = document.getElementById("room-name")
+        room_name.innerHTML = "";
+        room_name.appendChild(document.createTextNode(name));
+        
+        document.getElementById("currentroom").style.display = "block";
+        document.getElementById("createroombutton").style.display = "none"
+
+        join_room(name);
+    };
+
+    // returns the user to the main display and removes them from the room. also reloads the rooms
+    function backLobby(){
+        document.getElementById("errormessage").innerHTML = "";
+        document.getElementById("lobby-room").style.display = "block";
+        document.getElementById("createroombutton").style.display = "block";
+        document.getElementById("currentroom").style.display = "none";
+        leave_room();
+        socketio.emit('reload-rooms', {data:"nothing"});
+    };
+
+    //displays login modal when page loads
+    $(document).ready(function(){
+        if(currentUser == null){
+            $("#loginmodal").modal({backdrop: 'static', keyboard: false});
+        }
+        document.getElementById("createroomModal").style.display = "none";
+        document.getElementById("currentroom").style.display = "none";
+    });
+
+      </script>
+
+
+   </head>
+   <body>
+
+        <div class="banner d-flex flex-column align-items-center border-bottom border-info">
+            <h1 class="display-4" id="topbanner">user not logged in yet</h1>
+            <button class="btn btn-info col-3" id="createroombutton">Create Room</button>
+            
+        </div>
+      <!-- Login Modal -->
+      <div class="modal fade" id="loginmodal">
+        <div class="modal-dialog modal-dialog-centered" data-backdrop="static" role="document">
+        <div class="modal-content">
+                <div class="modal-header d-flex justify-content-center">
+                    <h3>Welcome to the Chat Server</h3>
+                </div>
+                <div class="modal-body d-flex justify-content-center">
+                    <form class="col"id="loginform">
+                            <input class="username form-control col-6" type="text" id='user_input' placeholder="Username" maxlength="20" required/>
+                            <button class="btn btn-primary col-6"> Login </button>
+                    </form>
+
+                </div>
+        </div>
+        </div>
+      </div>
+
+      <!-- admin modal -->
+      <div id="admin-modal" class="modal fade" role='dialog' aria-hidden='true'>
+          <div class='modal-dialog modal-dialog-centered' role='document'>
+              <div class="modal-content">
+                  <!-- shows room name and ahs the delete and quarantine buttons -->
+                  <div class="modal-header">
+                        <h5 class='modal-title' id='admin-modal-header'>modal title</h5>
+                        <button id="delete-room" class="btn btn-danger btn-sm" data-dismiss="modal">Delete room</button>
+                        <button id="quarantine-room" class="btn btn-outline-warning btn-sm" data-dismiss="modal">Quarantine room</button>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                  </div>
+                  <div class='modal-body' id='admin-modal-body'>
+                  <!-- displays all users here -->
+
+                  </div>
+                  <!-- save button just closes the modal -->
+                  <div class='modal-footer'>
+                    <button id="admin-save-btn" class="btn btn-primary" data-dismiss="modal">Save changes</button>
+                  </div>
+              </div>
+          </div>
+      </div>
+
+
+      <!-- Create Room Modal -->
+      <div class="createroom" id="createroomModal">
+        <form class="createroomform d-flex flex-column align-items-center" id="create-room-form">
+            <input class="form-control col-3" type="text" id="create-room-name" placeholder="Room Name" maxlength="20" required>
+            <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="private-checkbox">
+                    <label class="form-check-label" for="private-checkbox">
+                        Private Room
+                    </label>
+            </div>
+
+            <input class="form-control col-3" type="password" placeholder="Password" id="private-pass" style="display: none">
+            <button class="btn btn-info col-3" type="submit" id="submitcreateroom">Submit</button>
+        </form>
+
+      </div>
+      <!-- place for error messages -->
+      <div id="errormessage"></div>
+
+      <!-- where all the rooms get displayed -->
+      <div id="lobby-room"></div>
+      
+      <!-- Room display once you join a room -->
+      <div class="container" id="currentroom">
+          <div class = "row justify-content-end">
+            <div class="col-7">
+                <div class="card chat-card">
+                    <!-- shows the room name in the header with a "back" button -->
+                    <div class="card-header">
+                        <div id='room-card-header' class="row justify-content-between pl-3">
+                            <p id='room-name' class=''></p>
+                            <button class="btn btn-secondary btn-sm backtolobby float-right" onclick="backLobby()"> Back to Lobby</button>
+                            
+                        </div>
+                        <p id="room-warning-message"></p>
+                    </div>
+                    <!-- main message log -->
+                    <div class="card-body"> 
+                        <div id='chatlog'>
+    
+                        </div>
+                    </div>
+                    <hr>
+                    <!-- where messages are typed -->
+                    <div id='draft-block' class="p-2">
+                            <input class="p-1" type="text" id="message_input" placeholder="Your message..."/>
+                            <button class="btn btn-outline-success btn-sm float-left" onclick="sendMessage()">send</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Show users in room on right side -->
+            <div class="col-4">
+                <div class="card user-card">
+                    <div class="card-header">
+                        <h5>Users in the Room</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="user-list-room">
+                        </div>
+                    </div>
+                </div>
+            </div>
+          </div>
+           
+      </div>
+      <script>
+
+            //toggles create room form on and off when button is clicked
+            $("#createroombutton").click(function(){
+                if(document.getElementById("createroomModal").style.display === "none"){
+                    document.getElementById("createroomModal").style.display = "block";
+                    document.getElementById("private-pass").style.display = "none";
+                }
+                else {
+                    document.getElementById("createroomModal").style.display = "none";
+                }
+            });
+
+            //logins in user from first modal form
+            document.getElementById("loginform").addEventListener("submit", function(event){
+                event.preventDefault();
+                login();
+            });
+
+            //toggles the password input if room is private or not
+            $(function () {
+                $('#private-checkbox').change(function () {                
+                    $('#private-pass').toggle(this.checked);
+                }).change(); 
+            });
+
+            //create room form submitted and sends to server
+            $("#create-room-form").on("submit", function(event){
+                event.preventDefault();
+                let roomname = String(document.getElementById("create-room-name").value);
+                let roomadmin = currentUser.name;
+                let roomprivate = document.getElementById("private-checkbox").checked;
+                let roompass = String(document.getElementById("private-pass").value);
+
+                socketio.emit("create-room-to-server", {name:roomname, admin: roomadmin, private: roomprivate, password: roompass});  
+                document.getElementById("createroomModal").style.display = "none";
+                document.getElementById("create-room-name").value = "";
+                document.getElementById("private-checkbox").checked = false;
+                document.getElementById("private-pass").value = "";
+            });
+
+            //send message button was clicked, send to server            
+            $(document.body).on("click", ".msg_btn", function(){
+                let dm = $(this).attr('user');
+                let mes = $("[id='" + dm + "'][type='text'").val();
+                $("[id='" + dm + "'][type='text'").val('');
+                socketio.emit("private-message", {msg: mes, from: currentUser.name, to: dm, r: document.getElementById("room-name").innerHTML});
+
+            });
+            //admin button was clicked, send to server
+            $(document.body).on("click", "#admin-btn-lobby", function(){
+                socketio.emit("get-user-list", {room:$(this).attr('room'), user:currentUser});
+            });
+            //delete room button was clicked, send to server
+            $(document.body).on("click", "#delete-room", function(){
+                socketio.emit("delete-room", {room:$(this).attr('room')});
+            });
+            //quarantine room button was clicked, send to server
+            $(document.body).on("click", "#quarantine-room", function(){
+                socketio.emit("quarantine-room", {room:$(this).attr('room')});
+            });
+            //ban button was clicked. send to server
+            $(document.body).on("click", ".ban_btn", function(){
+                socketio.emit("ban_user", {room:$(this).attr('room'), user:$(this).attr('user')});
+            });
+            //kick button is clicked. send to the server
+            $(document.body).on("click", ".kick_btn", function(){
+                socketio.emit("kick_user", {room:$(this).attr('room'), user:$(this).attr('user')});
+            });
+            //when an unliked heart is clicked, likke the message
+            $(document.body).on("click", ".unliked-heart", function(){
+                socketio.emit("like-message", {room:currentRoom, user:currentUser, msg_idx:$(this).attr('idx')});
+            });
+            //when an already red heart is clicked, unlike the message
+            $(document.body).on("click", ".liked-heart", function(){
+                socketio.emit("unlike-message", {room:currentRoom, user:currentUser, msg_idx:$(this).attr('idx')});
+            });
+
+            $(document.body).on("click", ".joinroom", function(event){
+                let n = $(this).attr('name');
+                if($(this).attr('privacy') == "true"){
+                let trypass = String($("[name='" + $(this).attr('name') + "']").val());
+                socketio.emit("try-joining-room", {name: ($(this).attr('name')), attemptedpass: trypass, user: currentUser.name});
+            }
+            else{
+                displayRoom(n);
+            }
+            $("[name='" + $(this).attr('name') + "']").val('');
+        });
+
+      </script>
+      <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+      <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+   </body>
+</html>
+

@@ -1,0 +1,27 @@
+{
+  "name": "chat-server",
+  "version": "1.0.0",
+  "description": "a functioning multi-room chat server",
+  "main": "chat-server.js",
+  "dependencies": {
+    "http": "0.0.1-security",
+    "nodemon": "^2.0.2",
+    "socket.io": "^2.3.0",
+    "url": "^0.11.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "test-chat",
+    "start": "nodemon chat-server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cse330-spring-2020/module6-group-mod6-455650-448785.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cse330-spring-2020/module6-group-mod6-455650-448785/issues"
+  },
+  "homepage": "https://github.com/cse330-spring-2020/module6-group-mod6-455650-448785#readme"
+}
